@@ -1,0 +1,31 @@
+name: jit_supply_chain_sim
+version: "1.0.0"
+description: >
+  A minimal Just-In-Time (JIT) Supply Chain Simulator where an RL agent
+  manages inventory replenishment across a 3-tier supply chain (Supplier →
+  Warehouse → Retailer). The agent must balance holding costs against stockout
+  penalties while responding to stochastic demand — mirroring the kind of
+  real-world supply-chain decisions made daily by operations teams.
+tags:
+  - openenv
+  - supply-chain
+  - inventory-management
+  - operations
+tasks:
+  - name: easy_reorder
+    difficulty: easy
+    description: >
+      Single SKU, deterministic demand (fixed 10 units/day).
+      Agent must issue replenishment orders to keep retailer stock above zero
+      without over-ordering.
+  - name: medium_stochastic
+    difficulty: medium
+    description: >
+      Single SKU, stochastic demand (Poisson λ=10).
+      Agent must anticipate demand variability and manage lead-time uncertainty.
+  - name: hard_multi_sku
+    difficulty: hard
+    description: >
+      Three SKUs with independent Poisson demands, shared warehouse capacity,
+      and supplier lead-time variability. Agent must jointly optimise ordering
+      across all SKUs under capacity constraints.

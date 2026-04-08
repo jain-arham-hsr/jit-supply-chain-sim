@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jit-supply-chain-sim"
+version = "1.0.0"
+description = "JIT Supply Chain Simulator — OpenEnv environment"
+requires-python = ">=3.10"
+dependencies = [
+    "openenv-core>=0.2.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.0.0",
+    "numpy>=1.26.0",
+    "openai>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "httpx"]
+
+[project.scripts]
+server = "server.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
