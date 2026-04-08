@@ -71,6 +71,9 @@ class SupplyChainObservation(BaseModel):
     # Whether the episode is over
     done: bool = Field(default=False)
 
+    # The reward earned specifically on this step
+    reward: float = Field(default=0.0)
+
     # Task identifier
     task: str = Field(default="", description="Current task name.")
 
