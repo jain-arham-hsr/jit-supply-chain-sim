@@ -23,7 +23,7 @@ from typing import List, Optional
 
 from openai import OpenAI
 
-from jit_supply_chain_sim import JITSupplyChainEnv, SupplyChainAction
+from . import JITSupplyChainEnv, SupplyChainAction
 
 # ---------------------------------------------------------------------------
 # Environment variables
