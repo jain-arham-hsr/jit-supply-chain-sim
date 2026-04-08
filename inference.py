@@ -23,7 +23,8 @@ from typing import List, Optional
 
 from openai import OpenAI
 
-from . import JITSupplyChainEnv, SupplyChainAction
+from client import JITSupplyChainEnv
+from models import SupplyChainAction
 
 # ---------------------------------------------------------------------------
 # Environment variables
