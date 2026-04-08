@@ -32,11 +32,12 @@ API_BASE_URL: str = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME: str = os.getenv("MODEL_NAME", "gpt-4.1-mini")
 HF_TOKEN: str | None = os.getenv("HF_TOKEN")
 ENV_BASE_URL: str = os.getenv("ENV_BASE_URL", "http://localhost:8000")
+API_KEY: str = os.getenv("API_KEY") or HF_TOKEN
 
 if HF_TOKEN is None:
     raise ValueError("HF_TOKEN environment variable is required")
 
-client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 BENCHMARK = "jit_supply_chain_sim"
 TASKS = ["easy_reorder", "medium_stochastic", "hard_multi_sku"]
