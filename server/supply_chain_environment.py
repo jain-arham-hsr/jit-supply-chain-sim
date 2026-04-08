@@ -281,6 +281,7 @@ class SupplyChainEnvironment(Environment):
     def _make_obs(
         self,
         demand: Dict[str, int],
+        reward: float = 0.0,  # Add this argument
         message: str = "",
     ) -> SupplyChainObservation:
         s = self._state
@@ -289,6 +290,7 @@ class SupplyChainEnvironment(Environment):
             retailer_stock=dict(s.retailer_stock),
             pipeline={sku: sum(s.pipeline[sku]) for sku in s.sku_names},
             demand=demand,
+            reward=reward,
             cumulative_reward=s.cumulative_reward,
             message=message,
             done=s.done,
