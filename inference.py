@@ -33,7 +33,7 @@ from models import SupplyChainAction
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 API_BASE_URL: str = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME: str = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-LOCAL_IMAGE_NAME: str = os.getenv("LOCAL_IMAGE_NAME", "registry.hf.space/jain-arham-hsr/jit-supply-chain-sim:latest")
+LOCAL_IMAGE_NAME: str = os.getenv("LOCAL_IMAGE_NAME", "registry.hf.space/jain-arham-hsr-jit-supply-chain-sim:latest")
 
 if not API_KEY:
     raise ValueError("HF_TOKEN environment variable is required")
