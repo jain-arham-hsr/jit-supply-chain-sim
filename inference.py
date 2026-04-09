@@ -19,7 +19,7 @@ import asyncio
 import json
 import os
 import textwrap
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from openai import OpenAI
 
@@ -44,6 +44,8 @@ if not API_KEY:
 BENCHMARK = "jit_supply_chain_sim"
 TASKS = ["easy_reorder", "medium_stochastic", "hard_multi_sku"]
 MAX_STEPS = 100
+MAX_CONSECUTIVE_LLM_FAILURES = 3   # stop episode if LLM fails this many times in a row
+HISTORY_LENGTH = 5                  # how many past steps to show the LLM
 SUCCESS_SCORE_THRESHOLD = 0.5
 
 # ---------------------------------------------------------------------------
@@ -77,10 +79,17 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
 SYSTEM_PROMPT = textwrap.dedent("""
     You are an expert supply-chain manager running a Just-In-Time replenishment system.
     Each day you observe retailer stock, in-transit pipeline inventory, and recent demand
-    for each SKU. Issue replenishment orders to:
+    for each SKU. You also see a history of recent steps to help you adapt.
+
+    Your goals:
       - Prevent stockouts (very costly: -2.0 per unit short)
-      - Avoid excess holding costs (-0.05 per unit held)
-      - Account for lead times before orders arrive
+      - Avoid excess holding costs (-0.05 per unit held per day)
+      - Account for lead times: orders take several days to arrive
+
+    Strategy tips:
+      - Order enough to cover expected demand during the lead time
+      - If stock is low and pipeline is empty, order more urgently
+      - If stock is high, order less or nothing
 
     Respond ONLY with a JSON object mapping SKU names to integer order quantities.
     Example: {"sku_0": 15}
@@ -88,12 +97,26 @@ SYSTEM_PROMPT = textwrap.dedent("""
 """).strip()
 
 
-def get_model_action(client: OpenAI, obs: dict) -> dict:
+def get_model_action(
+    client: OpenAI,
+    obs: dict,
+    history: List[str],
+) -> tuple[dict, bool]:
+    """
+    Returns (orders_dict, llm_succeeded).
+    """
+    history_block = "\n".join(history[-HISTORY_LENGTH:]) if history else "No history yet."
+
     user_msg = textwrap.dedent(f"""
+        === Recent History (last {HISTORY_LENGTH} steps) ===
+        {history_block}
+
+        === Current State ===
         Day {obs.get('day', '?')} | Task: {obs.get('task', '?')}
         Retailer stock:     {json.dumps(obs.get('retailer_stock', {}))}
         Pipeline (transit): {json.dumps(obs.get('pipeline', {}))}
         Last demand:        {json.dumps(obs.get('demand', {}))}
+        Last reward:        {obs.get('reward', 0):.2f}
         Cumulative reward:  {obs.get('cumulative_reward', 0):.2f}
         Message: {obs.get('message', '')}
 
@@ -116,14 +139,32 @@ def get_model_action(client: OpenAI, obs: dict) -> dict:
             if raw.startswith("json"):
                 raw = raw[4:]
         orders = json.loads(raw.strip())
-        return {k: max(0, int(v)) for k, v in orders.items()}
+        return {k: max(0, int(v)) for k, v in orders.items()}, True
     except Exception as exc:
         print(f"[DEBUG] LLM call failed: {exc}", flush=True)
-        return {}
+        return {}, False
+
+
+def compute_score(rewards: List[float], obs: dict) -> float:
+    """
+    Compute normalised score [0, 1].
+    Uses cumulative_reward from the observation relative to task best/worst case.
+    Falls back to a reward-sum heuristic if needed.
+    """
+    cumulative = obs.get("cumulative_reward", sum(rewards))
+    # Rough normalisation: assume best case ~9.5/step (fulfill 10 - hold 0.5)
+    # and worst case ~-20.5/step (stockout 10*2 + hold 0.5)
+    steps = max(len(rewards), 1)
+    best = 9.5 * steps
+    worst = -20.5 * steps
+    if best <= worst:
+        return 0.5
+    score = (cumulative - worst) / (best - worst)
+    return float(max(0.0, min(1.0, score)))
 
 
 # ---------------------------------------------------------------------------
-# Run one task episode (reuses existing env connection)
+# Run one task episode
 # ---------------------------------------------------------------------------
 
 async def run_task(client: OpenAI, env: JITSupplyChainEnv, task: str) -> None:
@@ -131,20 +172,38 @@ async def run_task(client: OpenAI, env: JITSupplyChainEnv, task: str) -> None:
 
     steps_taken = 0
     rewards: List[float] = []
+    history: List[str] = []
     score = 0.0
     success = False
+    consecutive_failures = 0
+    last_obs: dict = {}
 
     try:
         result = await env.reset(task=task)
         obs = result.observation.model_dump()
+        last_obs = obs
 
         for step in range(1, MAX_STEPS + 1):
-            orders = get_model_action(client, obs)
+
+            orders, llm_ok = get_model_action(client, obs, history)
+
+            if not llm_ok:
+                consecutive_failures += 1
+                if consecutive_failures >= MAX_CONSECUTIVE_LLM_FAILURES:
+                    print(
+                        f"[DEBUG] {MAX_CONSECUTIVE_LLM_FAILURES} consecutive LLM failures — stopping episode.",
+                        flush=True,
+                    )
+                    break
+            else:
+                consecutive_failures = 0
+
             action = SupplyChainAction(orders=orders)
             action_str = json.dumps(orders)
 
             result = await env.step(action)
             obs = result.observation.model_dump()
+            last_obs = obs
 
             reward = float(result.reward or 0.0)
             done = bool(result.done)
@@ -152,14 +211,20 @@ async def run_task(client: OpenAI, env: JITSupplyChainEnv, task: str) -> None:
             rewards.append(reward)
             steps_taken = step
 
+            # Build history entry for next step
+            history.append(
+                f"Day {obs.get('day', '?')}: ordered {action_str} | "
+                f"demand={json.dumps(obs.get('demand', {}))} | "
+                f"stock={json.dumps(obs.get('retailer_stock', {}))} | "
+                f"reward={reward:.2f}"
+            )
+
             log_step(step=step, action=action_str, reward=reward, done=done, error=None)
 
             if done:
                 break
 
-        total = sum(rewards)
-        max_possible = MAX_STEPS * 10.0
-        score = float(max(0.0, min(1.0, total / max_possible)))
+        score = compute_score(rewards, last_obs)
         success = score >= SUCCESS_SCORE_THRESHOLD
 
     except Exception as exc:
