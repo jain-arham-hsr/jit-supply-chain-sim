@@ -4,8 +4,6 @@ JIT Supply Chain Simulator — HTTP client.
 
 from __future__ import annotations
 
-from typing import Any, Dict
-
 try:
     from .models import SupplyChainAction, SupplyChainObservation, SupplyChainState
 except ImportError:

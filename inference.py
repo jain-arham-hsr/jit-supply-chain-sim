@@ -33,7 +33,10 @@ from models import SupplyChainAction
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 API_BASE_URL: str = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME: str = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-LOCAL_IMAGE_NAME: str = os.getenv("LOCAL_IMAGE_NAME", "registry.hf.space/jain-arham-hsr-jit-supply-chain-sim:latest")
+LOCAL_IMAGE_NAME: str = os.getenv(
+    "LOCAL_IMAGE_NAME",
+    "registry.hf.space/jain-arham-hsr-jit-supply-chain-sim:latest",
+)
 
 if not API_KEY:
     raise ValueError("HF_TOKEN environment variable is required")
@@ -53,9 +56,8 @@ def log_start(task: str, env: str, model: str) -> None:
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     error_val = error if error else "null"
-    done_val = str(done).lower()
     print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}",
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}",
         flush=True,
     )
 
@@ -86,7 +88,7 @@ SYSTEM_PROMPT = textwrap.dedent("""
 """).strip()
 
 
-def get_model_action(client: OpenAI, obs: dict, step: int) -> dict:
+def get_model_action(client: OpenAI, obs: dict) -> dict:
     user_msg = textwrap.dedent(f"""
         Day {obs.get('day', '?')} | Task: {obs.get('task', '?')}
         Retailer stock:     {json.dumps(obs.get('retailer_stock', {}))}
@@ -121,10 +123,10 @@ def get_model_action(client: OpenAI, obs: dict, step: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Run one task episode
+# Run one task episode (reuses existing env connection)
 # ---------------------------------------------------------------------------
 
-async def run_task(client: OpenAI, task: str) -> None:
+async def run_task(client: OpenAI, env: JITSupplyChainEnv, task: str) -> None:
     log_start(task=task, env=BENCHMARK, model=MODEL_NAME)
 
     steps_taken = 0
@@ -132,17 +134,12 @@ async def run_task(client: OpenAI, task: str) -> None:
     score = 0.0
     success = False
 
-    env = await JITSupplyChainEnv.from_docker_image(LOCAL_IMAGE_NAME)
-
     try:
         result = await env.reset(task=task)
         obs = result.observation.model_dump()
 
         for step in range(1, MAX_STEPS + 1):
-            if result.done:
-                break
-
-            orders = get_model_action(client, obs, step)
+            orders = get_model_action(client, obs)
             action = SupplyChainAction(orders=orders)
             action_str = json.dumps(orders)
 
@@ -170,10 +167,6 @@ async def run_task(client: OpenAI, task: str) -> None:
         success = False
 
     finally:
-        try:
-            await env.close()
-        except Exception as e:
-            print(f"[DEBUG] env.close() error: {e}", flush=True)
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
 
@@ -183,8 +176,17 @@ async def run_task(client: OpenAI, task: str) -> None:
 
 async def main() -> None:
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-    for task in TASKS:
-        await run_task(client, task)
+
+    # Spin up the container once and reuse across all tasks
+    env = await JITSupplyChainEnv.from_docker_image(LOCAL_IMAGE_NAME)
+    try:
+        for task in TASKS:
+            await run_task(client, env, task)
+    finally:
+        try:
+            await env.close()
+        except Exception as e:
+            print(f"[DEBUG] env.close() error: {e}", flush=True)
 
 
 if __name__ == "__main__":
