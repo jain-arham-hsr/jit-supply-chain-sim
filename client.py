@@ -11,18 +11,23 @@ try:
 except ImportError:
     from models import SupplyChainAction, SupplyChainObservation, SupplyChainState
 
-from openenv.core import EnvClient
+from openenv.core import EnvClient, StepResult
 
 
-class JITSupplyChainEnv(EnvClient):
+class JITSupplyChainEnv(EnvClient[SupplyChainAction, SupplyChainObservation, SupplyChainState]):
     """Remote client for the JIT Supply Chain Simulator server."""
 
-    action_type = SupplyChainAction
-    observation_type = SupplyChainObservation
-    state_type = SupplyChainState
+    def _step_payload(self, action: SupplyChainAction) -> dict:
+        return {"orders": action.orders}
 
-    def _parse_observation(self, data: Dict[str, Any]) -> SupplyChainObservation:
-        return SupplyChainObservation(**data)
+    def _parse_result(self, payload: dict) -> StepResult[SupplyChainObservation]:
+        obs_data = payload.get("observation", {})
+        obs = SupplyChainObservation(**obs_data)
+        return StepResult(
+            observation=obs,
+            reward=payload.get("reward", 0.0),
+            done=payload.get("done", False),
+        )
 
-    def _parse_state(self, data: Dict[str, Any]) -> SupplyChainState:
-        return SupplyChainState(**data)
+    def _parse_state(self, payload: dict) -> SupplyChainState:
+        return SupplyChainState(**payload)
