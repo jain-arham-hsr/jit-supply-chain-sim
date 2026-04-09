@@ -38,18 +38,14 @@ COPY --from=builder /app /app
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app:$PYTHONPATH"
 
-# Use port 7860 for Hugging Face Spaces compatibility
-EXPOSE 7860
-
-ENV PORT=8000
+EXPOSE 8000
 
 # Metadata validation: ensures openenv validate can find everything
 LABEL org.openenv.version="1.0.0"
 
 # Healthcheck to ensure the FastAPI server is responsive
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -sf http://localhost:${PORT}/health || exit 1
+    CMD curl -sf http://localhost:8000/health || exit 1
 
 # Start the server using the entry point defined in pyproject.toml
-# We override the port to 7860 for the HF Space environment
-CMD ["sh", "-c", "uvicorn server.app:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
