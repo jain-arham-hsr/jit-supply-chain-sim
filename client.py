@@ -11,7 +11,8 @@ try:
 except ImportError:
     from models import SupplyChainAction, SupplyChainObservation, SupplyChainState
 
-from openenv.core import EnvClient, StepResult
+from openenv.core import EnvClient
+from openenv.core.client_types import StepResult
 
 
 class JITSupplyChainEnv(EnvClient[SupplyChainAction, SupplyChainObservation, SupplyChainState]):

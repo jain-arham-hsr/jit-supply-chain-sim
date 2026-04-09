@@ -58,6 +58,11 @@ class SupplyChainObservation(BaseModel):
         ..., description="Demand units fulfilled (or attempted) this step."
     )
 
+    # Step reward (required by OpenEnv base Observation)
+    reward: float = Field(
+        default=0.0, description="Reward received this step."
+    )
+
     # Cumulative reward so far
     cumulative_reward: float = Field(
         ..., description="Total reward accumulated since episode reset."
@@ -70,9 +75,6 @@ class SupplyChainObservation(BaseModel):
 
     # Whether the episode is over
     done: bool = Field(default=False)
-
-    # The reward earned specifically on this step
-    reward: float = Field(default=0.0)
 
     # Task identifier
     task: str = Field(default="", description="Current task name.")

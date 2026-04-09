@@ -114,6 +114,14 @@ class SupplyChainEnvironment(Environment):
     # ------------------------------------------------------------------
 
     def reset(self, **kwargs) -> SupplyChainObservation:
+        # Allow task to be overridden at reset time
+        task = kwargs.get("task", self.task)
+        if task != self.task:
+            if task not in TASK_CONFIGS:
+                raise ValueError(f"Unknown task '{task}'. Choose from: {list(TASK_CONFIGS)}")
+            self.task = task
+            self.cfg = TASK_CONFIGS[task]
+
         cfg = self.cfg
         self._episode_id = str(uuid.uuid4())[:8]
         self._prev_orders = None
@@ -155,7 +163,7 @@ class SupplyChainEnvironment(Environment):
 
         # --- 1. Advance pipeline: deliver orders arriving today ---
         for sku in cfg["sku_names"]:
-            if cfg["pipeline"][sku]:
+            if s.pipeline[sku]:
                 arriving = s.pipeline[sku].pop(0)
                 s.retailer_stock[sku] = min(
                     s.retailer_stock[sku] + arriving,
@@ -221,6 +229,7 @@ class SupplyChainEnvironment(Environment):
 
         obs = self._make_obs(
             demand=demand_realised,
+            reward=reward,
             message=" | ".join(messages) if messages else "All clear.",
         )
         info = {
@@ -281,7 +290,7 @@ class SupplyChainEnvironment(Environment):
     def _make_obs(
         self,
         demand: Dict[str, int],
-        reward: float = 0.0,  # Add this argument
+        reward: float = 0.0,
         message: str = "",
     ) -> SupplyChainObservation:
         s = self._state
